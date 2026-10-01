@@ -1,0 +1,135 @@
+/* styles.css — Mobile first: pensado para una mano y guantes (botones de 48 px o más). */
+
+:root {
+  --verde: #0b6e4f;
+  --verde-claro: #e3f2ec;
+  --fondo: #eef1f2;
+  --tarjeta: #ffffff;
+  --texto: #1c2428;
+  --gris: #5d6a70;
+  --borde: #cfd6d9;
+  --bien: #1f8a4c;
+  --mal: #c62828;
+  --alto-toque: 48px; /* tamaño mínimo cómodo para tocar con guantes */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 17px;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+.barra-superior {
+  background: var(--verde);
+  color: #fff;
+  padding: 12px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.barra-superior h1 { margin: 0; font-size: 20px; }
+.barra-superior .sub { font-size: 14px; opacity: .85; }
+
+main { padding: 12px 14px 110px; max-width: 640px; margin: 0 auto; }
+h2 { font-size: 19px; margin: 20px 0 10px; }
+h3 { font-size: 17px; margin: 22px 0 8px; color: var(--verde); }
+.codigo { font-size: 13px; color: var(--gris); margin: 0 0 8px; }
+.vacio { color: var(--gris); text-align: center; padding: 18px 0; }
+
+/* ---- botones ---- */
+.btn {
+  min-height: var(--alto-toque);
+  padding: 10px 16px;
+  font-size: 17px;
+  border: 2px solid var(--borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto);
+}
+.btn:active { background: var(--verde-claro); }
+.btn.chico { min-height: 44px; padding: 8px 14px; font-size: 16px; }
+.btn.principal { background: var(--verde); border-color: var(--verde); color: #fff; font-weight: 600; }
+.btn.peligro { color: var(--mal); border-color: var(--mal); }
+
+.botones-planilla { display: grid; gap: 10px; }
+.btn.grande { text-align: left; min-height: 64px; font-weight: 600; }
+.btn.grande .codigo { display: block; font-weight: 400; margin: 0; }
+
+/* ---- inicio ---- */
+.barra-fecha { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.barra-fecha label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+
+.tarjeta {
+  background: var(--tarjeta);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--borde);
+}
+.tarjeta-texto { display: flex; flex-direction: column; gap: 2px; }
+.tarjeta-texto .hora { font-size: 13px; color: var(--gris); }
+.tarjeta-botones { display: flex; gap: 10px; }
+.tarjeta-botones .btn { flex: 1; }
+
+/* ---- formulario ---- */
+.campo { margin-bottom: 12px; }
+.campo label { display: block; font-weight: 600; margin-bottom: 4px; }
+
+input[type=text], input[type=date], select, textarea {
+  width: 100%;
+  min-height: var(--alto-toque);
+  padding: 10px 12px;
+  font-size: 17px;
+  font-family: inherit;
+  border: 2px solid var(--borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto);
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--verde); }
+
+.fila {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin-bottom: 10px;
+}
+.fila-titulo { margin: 0 0 8px; font-weight: 600; }
+.celdas { display: flex; flex-wrap: wrap; gap: 10px; }
+.celda { flex: 1 1 140px; min-width: 0; }
+.celda-label { display: block; font-size: 13px; color: var(--gris); margin-bottom: 3px; }
+
+.grupo { display: flex; gap: 6px; }
+.opc {
+  flex: 1;
+  min-height: var(--alto-toque);
+  font-size: 16px;
+  border: 2px solid var(--borde);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--texto);
+}
+.opc.sel { background: var(--verde); border-color: var(--verde); color: #fff; font-weight: 600; }
+.opc.ok.sel { background: var(--bien); border-color: var(--bien); }
+.opc.mal.sel { background: var(--mal); border-color: var(--mal); }
+
+/* Barra fija abajo: Guardar siempre a mano sin tener que bajar hasta el final de la planilla. */
+.barra-guardar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--fondo);
+  border-top: 1px solid var(--borde);
+}
+.barra-guardar .btn { flex: 1; }
+.barra-guardar .principal { flex: 2; }

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MASH Check</title>
+  <!-- Rutas SIEMPRE relativas (sin "/" al principio): en GitHub Pages la app vive en
+       /mash-check/ y una ruta como "/css/styles.css" buscaría en la raíz del dominio y daría 404. -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="barra-superior">
+    <h1>MASH Check</h1>
+    <span class="sub">Seguridad e Higiene</span>
+  </header>
+
+  <!-- Toda la app dibuja acá adentro (inicio o formulario). -->
+  <main id="vista"></main>
+
+  <!-- Orden de carga importante: cada archivo usa lo que definió el anterior. -->
+  <script src="js/planillas-base.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
