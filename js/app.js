@@ -1,5 +1,6 @@
 /*
- * app.js — Interfaz: dibuja las dos pantallas (inicio y formulario) y maneja los toques.
+ * app.js — Interfaz: dibuja las pantallas (inicio, formulario de carga y editor de planillas)
+ * y maneja los toques.
  *
  * Es una IIFE (función que se ejecuta sola) para que sus variables no se mezclen con las de
  * los otros archivos. Todo el texto que escribe el usuario pasa por esc() antes de ir a
@@ -10,9 +11,20 @@
 
   const vista = document.getElementById('vista');
 
-  // "borrador" = el registro que se está cargando/editando. Los cambios van ahí y solo se
-  // copian al Store cuando se toca Guardar; así Cancelar no deja nada a medias.
-  const estado = { fecha: Store.hoy(), borrador: null };
+  // Hay un "borrador" por cada cosa que se puede estar editando (nunca los dos a la vez):
+  //   borrador = el REGISTRO que se está cargando/editando
+  //   edicion  = la PLANILLA que se está creando/editando en el constructor
+  // Los cambios van al borrador y solo se copian al Store con Guardar; así Cancelar no deja
+  // nada a medias.
+  const estado = { fecha: Store.hoy(), borrador: null, edicion: null };
+
+  // Tipos de columna que ofrece el constructor (los mismos que sabe dibujar el formulario).
+  const TIPOS_COLUMNA = [
+    ['siNo', 'Sí / No'],
+    ['bienMal', 'Bien / Mal'],
+    ['check', 'Tilde (Realizado)'],
+    ['texto', 'Texto']
+  ];
 
   // ---------- utilidades ----------
 
@@ -31,17 +43,21 @@
     return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  // ---------- pantalla de INICIO ----------
+  // ====================================================================
+  // PANTALLA DE INICIO
+  // ====================================================================
 
   function pintarInicio() {
     estado.borrador = null;
+    estado.edicion = null;
     const registros = Store.registrosDelDia(estado.fecha);
+    const planillas = Store.planillas();
 
-    const botones = PLANILLAS_BASE.map((p) =>
-      '<button class="btn grande" data-act="nueva" data-id="' + esc(p.id) + '">' +
-        '<span class="codigo">' + esc(p.codigo) + '</span>' + esc(p.titulo) +
-      '</button>'
-    ).join('');
+    // Si se borraron todas las planillas no puede quedar una pantalla sin salida.
+    const bloquePlanillas = planillas.length
+      ? planillas.map(htmlPlanilla).join('')
+      : '<p class="vacio">No hay planillas.</p>' +
+        '<button class="btn" data-act="pl-restaurar">Restaurar planillas de fábrica</button>';
 
     const lista = registros.length
       ? registros.map(tarjetaRegistro).join('')
@@ -53,8 +69,24 @@
         '<button class="btn chico" data-act="hoy">Hoy</button>' +
       '</div>' +
       '<h2>Cargar planilla</h2>' +
-      '<div class="botones-planilla">' + botones + '</div>' +
+      bloquePlanillas +
+      '<button class="btn" data-act="pl-nueva">+ Nueva planilla</button>' +
       '<h2>Registros del día (' + registros.length + ')</h2>' + lista;
+  }
+
+  // Una planilla: el botón grande para CARGAR y, abajo, sus tres acciones de administración.
+  function htmlPlanilla(p) {
+    const id = esc(p.id);
+    return '<div class="planilla">' +
+      '<button class="btn grande" data-act="nueva" data-id="' + id + '">' +
+        '<span class="codigo">' + esc(p.codigo) + '</span>' + esc(p.titulo) +
+      '</button>' +
+      '<div class="planilla-botones">' +
+        '<button class="btn chico" data-act="pl-editar" data-id="' + id + '">Editar</button>' +
+        '<button class="btn chico" data-act="pl-duplicar" data-id="' + id + '">Duplicar</button>' +
+        '<button class="btn chico peligro" data-act="pl-borrar" data-id="' + id + '">Borrar</button>' +
+      '</div>' +
+    '</div>';
   }
 
   function tarjetaRegistro(reg) {
@@ -77,7 +109,9 @@
     '</div>';
   }
 
-  // ---------- pantalla del FORMULARIO ----------
+  // ====================================================================
+  // FORMULARIO DE CARGA (completar una planilla)
+  // ====================================================================
 
   function pintarFormulario() {
     const b = estado.borrador;
@@ -151,16 +185,17 @@
     return '<div class="grupo" data-k="' + esc(clave) + '">' + botones + '</div>';
   }
 
-  // ---------- acciones ----------
+  // ---------- acciones del formulario de carga ----------
 
   function nuevoRegistro(idPlanilla) {
-    const planilla = PLANILLAS_BASE.find((p) => p.id === idPlanilla);
+    const planilla = Store.planilla(idPlanilla);
+    if (!planilla) return;
     const nombre = Store.ultimoNombre(); // para no volver a tipear el nombre en cada planilla
     estado.borrador = {
       id: null,
       planillaId: planilla.id,
       // Copia de la estructura: el registro conserva la planilla tal como era hoy,
-      // aunque más adelante se edite la planilla (ver DIAGNOSTICO.md).
+      // aunque más adelante se edite o se borre la planilla.
       planilla: clonar(planilla),
       fecha: estado.fecha,
       cabecera: planilla.cabecera.some((c) => c.key === 'reviso') ? { reviso: nombre } : {},
@@ -214,14 +249,299 @@
     });
   }
 
-  // ---------- eventos (un solo oyente para toda la pantalla) ----------
+  // ====================================================================
+  // CONSTRUCTOR DE PLANILLAS (crear / editar / duplicar / borrar)
+  // ====================================================================
+  //
+  // El editor trabaja con una versión "cómoda para editar" de la planilla (el borrador):
+  //   - las opciones de un desplegable y los ítems de una sección son UN texto con una línea
+  //     por elemento (más rápido de tipear en el celu que un campo por ítem, y ordenar = ordenar
+  //     las líneas);
+  //   - las claves técnicas (s1, r1, c1...) no existen: se vuelven a generar al guardar.
+  // Eso es seguro porque los registros ya cargados guardan su PROPIA copia de la planilla: no
+  // dependen de que las claves de la planilla actual coincidan.
+
+  function campoABorrador(c) {
+    return { key: c.key, label: c.label, tipo: c.tipo, opcionesTexto: (c.opciones || []).join('\n') };
+  }
+
+  function planillaABorrador(p, comoCopia) {
+    return {
+      id: comoCopia ? null : p.id,
+      codigo: p.codigo,
+      titulo: comoCopia ? p.titulo + ' (copia)' : p.titulo,
+      observaciones: p.observaciones,
+      cabecera: p.cabecera.map(campoABorrador),
+      pie: p.pie.map(campoABorrador),
+      secciones: p.secciones.map((s) => ({
+        titulo: s.titulo,
+        columnas: s.columnas.map((c) => ({ label: c.label, tipo: c.tipo })),
+        filasTexto: s.filas.map((f) => f.label).join('\n')
+      }))
+    };
+  }
+
+  function seccionVacia() {
+    return { titulo: '', columnas: [{ label: '', tipo: 'siNo' }], filasTexto: '' };
+  }
+
+  function abrirEditor(borrador) {
+    estado.edicion = borrador;
+    pintarEditor();
+    window.scrollTo(0, 0);
+  }
+
+  function planillaNueva() {
+    // "Revisó" ya viene puesto: con esa clave el nombre se recuerda solo (ver nuevoRegistro).
+    abrirEditor({
+      id: null, codigo: '', titulo: '', observaciones: false, pie: [],
+      cabecera: [{ key: 'reviso', label: 'Revisó', tipo: 'texto', opcionesTexto: '' }],
+      secciones: [seccionVacia()]
+    });
+  }
+
+  // ---------- dibujo del editor ----------
+
+  function pintarEditor() {
+    const e = estado.edicion;
+    // Al agregar/mover/quitar se redibuja todo; guardamos el scroll para no saltar al principio.
+    const scroll = window.scrollY;
+
+    vista.innerHTML =
+      '<h2>' + (e.id ? 'Editar planilla' : 'Nueva planilla') + '</h2>' +
+      campoEditor('Título', 'titulo', e.titulo) +
+      campoEditor('Código (opcional)', 'codigo', e.codigo) +
+      '<h3>Datos de arriba</h3>' + htmlListaCampos('cabecera') +
+      '<h3>Secciones</h3>' + e.secciones.map(htmlSeccionEditor).join('') +
+      '<button class="btn" data-act="b-agrega" data-lista="secciones">+ Agregar sección</button>' +
+      '<label class="chk"><input type="checkbox" data-bcampo="observaciones"' +
+        (e.observaciones ? ' checked' : '') + '> Cuadro de observaciones al final</label>' +
+      '<h3>Datos del final</h3>' + htmlListaCampos('pie') +
+      '<div class="barra-guardar">' +
+        '<button class="btn" data-act="pl-cancelar">Cancelar</button>' +
+        '<button class="btn principal" data-act="pl-guardar">Guardar planilla</button>' +
+      '</div>';
+    window.scrollTo(0, scroll);
+  }
+
+  function campoEditor(titulo, nombre, valor) {
+    return '<div class="campo"><label>' + esc(titulo) + '</label>' +
+      '<input type="text" data-bcampo="' + nombre + '" value="' + esc(valor) + '"></div>';
+  }
+
+  // Botones ▲ ▼ ✕ de un elemento de lista. "lista" + "i" (+ "s" para columnas) dicen cuál es.
+  function botonesOrden(lista, i, s) {
+    const datos = ' data-lista="' + lista + '" data-i="' + i + '"' + (s == null ? '' : ' data-s="' + s + '"');
+    return '<div class="orden">' +
+      '<button class="btn icono" data-act="b-sube"' + datos + ' aria-label="Subir">▲</button>' +
+      '<button class="btn icono" data-act="b-baja"' + datos + ' aria-label="Bajar">▼</button>' +
+      '<button class="btn icono peligro" data-act="b-quita"' + datos + ' aria-label="Quitar">✕</button>' +
+    '</div>';
+  }
+
+  function atributosCampo(lista, i, prop, s) {
+    return ' data-lista="' + lista + '" data-i="' + i + '" data-prop="' + prop + '"' +
+      (s == null ? '' : ' data-s="' + s + '"');
+  }
+
+  function selectorTipo(opciones, actual, atributos) {
+    return '<select' + atributos + '>' + opciones.map((o) =>
+      '<option value="' + o[0] + '"' + (o[0] === actual ? ' selected' : '') + '>' + o[1] + '</option>'
+    ).join('') + '</select>';
+  }
+
+  // Lista de datos sueltos (cabecera = arriba, pie = al final de la planilla).
+  function htmlListaCampos(lista) {
+    const campos = estado.edicion[lista].map((c, i) => {
+      const opciones = c.tipo === 'opciones'
+        ? '<textarea rows="3" placeholder="Una opción por línea"' +
+            atributosCampo(lista, i, 'opcionesTexto') + '>' + esc(c.opcionesTexto) + '</textarea>'
+        : '';
+      return '<div class="bloque">' +
+        '<input type="text" placeholder="Nombre del dato (ej. Sector)" value="' + esc(c.label) + '"' +
+          atributosCampo(lista, i, 'label') + '>' +
+        selectorTipo([['texto', 'Texto libre'], ['opciones', 'Elegir de una lista']], c.tipo,
+          atributosCampo(lista, i, 'tipo')) +
+        opciones + botonesOrden(lista, i) +
+      '</div>';
+    }).join('');
+    return campos + '<button class="btn chico" data-act="b-agrega" data-lista="' + lista + '">+ Agregar dato</button>';
+  }
+
+  function htmlSeccionEditor(sec, si) {
+    const columnas = sec.columnas.map((col, ci) =>
+      '<div class="bloque interno">' +
+        '<input type="text" placeholder="Nombre de la columna (ej. Condición)" value="' + esc(col.label) + '"' +
+          atributosCampo('columnas', ci, 'label', si) + '>' +
+        selectorTipo(TIPOS_COLUMNA, col.tipo, atributosCampo('columnas', ci, 'tipo', si)) +
+        botonesOrden('columnas', ci, si) +
+      '</div>'
+    ).join('');
+
+    return '<div class="bloque seccion">' +
+      '<input type="text" placeholder="Título de la sección" value="' + esc(sec.titulo) + '"' +
+        atributosCampo('secciones', si, 'titulo') + '>' +
+      botonesOrden('secciones', si) +
+      '<p class="celda-label">Columnas (lo que se responde en cada ítem)</p>' + columnas +
+      '<button class="btn chico" data-act="b-agrega" data-lista="columnas" data-s="' + si + '">+ Agregar columna</button>' +
+      '<p class="celda-label">Ítems (uno por línea)</p>' +
+      '<textarea rows="8"' + atributosCampo('secciones', si, 'filasTexto') + '>' + esc(sec.filasTexto) + '</textarea>' +
+    '</div>';
+  }
+
+  // ---------- acciones del editor ----------
+
+  // Devuelve el arreglo al que apunta un botón/campo del editor.
+  function obtenerLista(nombre, s) {
+    const e = estado.edicion;
+    return nombre === 'columnas' ? e.secciones[Number(s)].columnas : e[nombre];
+  }
+
+  function mover(lista, i, delta) {
+    const j = i + delta;
+    if (j < 0 || j >= lista.length) return;
+    const temporal = lista[i];
+    lista[i] = lista[j];
+    lista[j] = temporal;
+  }
+
+  function accionEditor(boton) {
+    const d = boton.dataset;
+    const lista = obtenerLista(d.lista, d.s);
+    const i = Number(d.i);
+
+    if (d.act === 'b-sube') mover(lista, i, -1);
+    if (d.act === 'b-baja') mover(lista, i, 1);
+    if (d.act === 'b-quita') {
+      // Una sección arrastra todos sus ítems: ahí sí confirmamos.
+      if (d.lista === 'secciones' && !confirm('¿Quitar la sección con todos sus ítems?')) return;
+      lista.splice(i, 1);
+    }
+    if (d.act === 'b-agrega') {
+      if (d.lista === 'secciones') lista.push(seccionVacia());
+      else if (d.lista === 'columnas') lista.push({ label: '', tipo: 'siNo' });
+      else lista.push({ key: null, label: '', tipo: 'texto', opcionesTexto: '' });
+    }
+    pintarEditor();
+  }
+
+  // Cada línea no vacía de un textarea es un elemento.
+  function lineas(texto) {
+    return texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  }
+
+  // Convierte los datos sueltos del borrador en campos de planilla. Los que ya tenían clave la
+  // conservan (así "reviso" sigue recordando el nombre); los nuevos reciben "campo1", "campo2"...
+  function construirCampos(campos, nombreLista) {
+    const usadas = new Set(campos.map((c) => c.key).filter(Boolean));
+    let contador = 0;
+    const resultado = [];
+    for (const c of campos) {
+      const label = c.label.trim();
+      if (!label) return { error: 'Hay un dato sin nombre en "' + nombreLista + '".' };
+      let key = c.key;
+      while (!key) {
+        contador += 1;
+        if (!usadas.has('campo' + contador)) { key = 'campo' + contador; usadas.add(key); }
+      }
+      const campo = { key: key, label: label, tipo: c.tipo };
+      if (c.tipo === 'opciones') {
+        campo.opciones = lineas(c.opcionesTexto);
+        if (!campo.opciones.length) return { error: 'El dato "' + label + '" necesita al menos una opción.' };
+      }
+      resultado.push(campo);
+    }
+    return { campos: resultado };
+  }
+
+  // Valida el borrador y arma la planilla final. Devuelve { planilla } o { error }.
+  function construirPlanilla(e) {
+    const titulo = e.titulo.trim();
+    if (!titulo) return { error: 'Falta el título de la planilla.' };
+    if (!e.secciones.length) return { error: 'La planilla necesita al menos una sección.' };
+
+    const cabecera = construirCampos(e.cabecera, 'Datos de arriba');
+    if (cabecera.error) return cabecera;
+    const pie = construirCampos(e.pie, 'Datos del final');
+    if (pie.error) return pie;
+
+    const secciones = [];
+    for (let si = 0; si < e.secciones.length; si++) {
+      const s = e.secciones[si];
+      const tituloSeccion = s.titulo.trim();
+      if (!tituloSeccion) return { error: 'La sección ' + (si + 1) + ' no tiene título.' };
+      if (!s.columnas.length) return { error: 'La sección "' + tituloSeccion + '" necesita al menos una columna.' };
+      if (s.columnas.some((c) => !c.label.trim())) return { error: 'Hay una columna sin nombre en "' + tituloSeccion + '".' };
+      const filas = lineas(s.filasTexto);
+      if (!filas.length) return { error: 'La sección "' + tituloSeccion + '" necesita al menos un ítem.' };
+
+      secciones.push({
+        id: 's' + (si + 1),
+        titulo: tituloSeccion,
+        columnas: s.columnas.map((c, ci) => ({ key: 'c' + (ci + 1), label: c.label.trim(), tipo: c.tipo })),
+        filas: filas.map((label, fi) => ({ key: 'r' + (fi + 1), label: label }))
+      });
+    }
+
+    return {
+      planilla: {
+        id: e.id, codigo: e.codigo.trim(), titulo: titulo,
+        cabecera: cabecera.campos, secciones: secciones,
+        observaciones: Boolean(e.observaciones), pie: pie.campos
+      }
+    };
+  }
+
+  function guardarPlanilla() {
+    const resultado = construirPlanilla(estado.edicion);
+    if (resultado.error) {
+      alert(resultado.error);
+      return;
+    }
+    if (!Store.guardarPlanilla(resultado.planilla)) {
+      alert('No se pudo guardar la planilla: el celular no tiene espacio para la app.');
+      return;
+    }
+    pintarInicio();
+  }
+
+  function borrarPlanilla(id) {
+    const p = Store.planilla(id);
+    if (!p) return;
+    const aviso = '¿Borrar la planilla "' + p.titulo + '"?\n\nLos registros que ya cargaste con ella NO se borran.';
+    if (!confirm(aviso)) return;
+    if (!Store.borrarPlanilla(id)) alert('No se pudo borrar. Probá de nuevo.');
+    pintarInicio();
+  }
+
+  // Lo que se escribe en el editor va directo al borrador (sin redibujar, para no perder el foco).
+  function entradaEditor(campo) {
+    const e = estado.edicion;
+    const d = campo.dataset;
+    if (d.bcampo) {
+      e[d.bcampo] = campo.type === 'checkbox' ? campo.checked : campo.value;
+      return;
+    }
+    if (!d.prop) return;
+    obtenerLista(d.lista, d.s)[Number(d.i)][d.prop] = campo.value;
+    // Cambiar el tipo de un dato puede mostrar/ocultar el cuadro de opciones: ahí sí redibujamos.
+    if (d.prop === 'tipo' && d.lista !== 'columnas') pintarEditor();
+  }
+
+  // ====================================================================
+  // EVENTOS (un solo oyente para toda la pantalla)
+  // ====================================================================
   // "Delegación de eventos": en vez de poner un oyente en cada botón (que se pierde cada vez
   // que redibujamos), ponemos uno en #vista y miramos qué se tocó con data-act.
 
   vista.addEventListener('click', (e) => {
     const boton = e.target.closest('[data-act]');
     if (!boton) return;
-    switch (boton.dataset.act) {
+    const accion = boton.dataset.act;
+
+    if (accion.startsWith('b-')) { accionEditor(boton); return; }
+
+    switch (accion) {
       case 'nueva': nuevoRegistro(boton.dataset.id); break;
       case 'editar': editarRegistro(boton.dataset.id); break;
       case 'borrar': borrar(boton.dataset.id); break;
@@ -231,11 +551,22 @@
       case 'cancelar':
         if (confirm('¿Salir sin guardar lo que cargaste?')) pintarInicio();
         break;
+      case 'pl-nueva': planillaNueva(); break;
+      case 'pl-editar': abrirEditor(planillaABorrador(Store.planilla(boton.dataset.id), false)); break;
+      // Duplicar NO crea nada todavía: abre el editor con una copia y recién se guarda con Guardar.
+      case 'pl-duplicar': abrirEditor(planillaABorrador(Store.planilla(boton.dataset.id), true)); break;
+      case 'pl-borrar': borrarPlanilla(boton.dataset.id); break;
+      case 'pl-guardar': guardarPlanilla(); break;
+      case 'pl-cancelar':
+        if (confirm('¿Salir sin guardar los cambios de la planilla?')) pintarInicio();
+        break;
+      case 'pl-restaurar': Store.restaurarDeFabrica(); pintarInicio(); break;
     }
   });
 
-  // Cada vez que se escribe en un campo, lo copiamos al borrador (sin redibujar, para no perder el foco).
+  // Cada vez que se escribe en un campo, lo copiamos al borrador que corresponda.
   vista.addEventListener('input', (e) => {
+    if (estado.edicion) { entradaEditor(e.target); return; }
     const campo = e.target.dataset.campo;
     if (!campo || !estado.borrador) return;
     const b = estado.borrador;

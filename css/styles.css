@@ -133,3 +133,28 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--v
 }
 .barra-guardar .btn { flex: 1; }
 .barra-guardar .principal { flex: 2; }
+
+/* ---- inicio: planillas con sus acciones ---- */
+.planilla { margin-bottom: 14px; }
+.planilla .btn.grande { width: 100%; }
+.planilla-botones { display: flex; gap: 8px; margin-top: 6px; }
+.planilla-botones .btn { flex: 1; }
+#vista > .btn:not(.chico) { width: 100%; margin-top: 4px; }
+
+/* ---- editor de planillas ---- */
+.bloque {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bloque.interno { background: var(--fondo); }
+.bloque.seccion { border: 2px solid var(--verde); }
+.orden { display: flex; gap: 6px; }
+.btn.icono { flex: 1; padding: 0; min-width: var(--alto-toque); }
+.chk { display: flex; align-items: center; gap: 10px; margin: 16px 0 4px; font-weight: 600; min-height: var(--alto-toque); }
+.chk input { width: 26px; height: 26px; }

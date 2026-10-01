@@ -9,6 +9,7 @@
  * Forma de lo guardado (clave 'mashCheck.v1'):
  * {
  *   ultimoNombre: 'Maxi',
+ *   planillas: [ ...planillas editables (forma documentada en planillas-base.js)... ],
  *   registros: [{
  *     id, fecha: 'AAAA-MM-DD', planillaId,
  *     planilla: { ...copia de la estructura de la planilla ESE día... },
@@ -24,16 +25,27 @@
 const Store = (() => {
   const CLAVE = 'mashCheck.v1';
   let datos = cargar();
+  persistir(); // fija las planillas de fábrica la primera vez (ver cargar)
 
   function vacio() {
-    return { ultimoNombre: '', registros: [] };
+    return { ultimoNombre: '', registros: [], planillas: copiar(PLANILLAS_BASE) };
+  }
+
+  function copiar(objeto) {
+    return JSON.parse(JSON.stringify(objeto));
   }
 
   function cargar() {
     let texto = null;
     try {
       texto = localStorage.getItem(CLAVE);
-      return texto ? JSON.parse(texto) : vacio();
+      if (!texto) return vacio();
+      const guardado = JSON.parse(texto);
+      // Datos de la Fase 1 no tenían planillas: se las agregamos sin tocar los registros.
+      // Desde ahora las planillas viven en el Store (no en PLANILLAS_BASE) porque el usuario
+      // las puede editar; PLANILLAS_BASE queda solo como "punto de partida de fábrica".
+      if (!Array.isArray(guardado.planillas)) guardado.planillas = copiar(PLANILLAS_BASE);
+      return guardado;
     } catch (error) {
       // Si el JSON está dañado NO arrancamos en blanco sin más: el próximo guardado pisaría
       // los datos viejos. Los apartamos en otra clave para poder recuperarlos a mano.
@@ -98,9 +110,51 @@ const Store = (() => {
     return persistir();
   }
 
+  // ---------- planillas ----------
+
+  function planillas() {
+    return datos.planillas;
+  }
+
+  function planilla(id) {
+    return datos.planillas.find((p) => p.id === id) || null;
+  }
+
+  // Alta si no tiene id, modificación si ya existe. Editar una planilla NO toca los registros ya
+  // cargados: cada uno guarda su propia copia de la estructura.
+  function guardarPlanilla(nueva) {
+    const antes = JSON.stringify(datos);
+    const indice = datos.planillas.findIndex((p) => p.id === nueva.id);
+    if (indice >= 0) {
+      datos.planillas[indice] = nueva;
+    } else {
+      nueva.id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      datos.planillas.push(nueva);
+    }
+    if (persistir()) return true;
+    datos = JSON.parse(antes);
+    return false;
+  }
+
+  function borrarPlanilla(id) {
+    datos.planillas = datos.planillas.filter((p) => p.id !== id);
+    return persistir();
+  }
+
+  // Vuelve a agregar las planillas de fábrica que falten (no pisa las que ya existen).
+  function restaurarDeFabrica() {
+    PLANILLAS_BASE.forEach((base) => {
+      if (!planilla(base.id)) datos.planillas.push(copiar(base));
+    });
+    return persistir();
+  }
+
   function ultimoNombre() {
     return datos.ultimoNombre || '';
   }
 
-  return { hoy, registrosDelDia, obtener, guardarRegistro, borrar, ultimoNombre };
+  return {
+    hoy, registrosDelDia, obtener, guardarRegistro, borrar, ultimoNombre,
+    planillas, planilla, guardarPlanilla, borrarPlanilla, restaurarDeFabrica
+  };
 })();
