@@ -51,15 +51,16 @@ módulos, un objeto global por archivo, datos en el dispositivo, reporte imprimi
 ## Probar
 Servir la carpeta (con `file://` el service worker no anda): `python3 -m http.server 8000`.
 
-## Estructura actual (Fase 1 hecha)
+## Estructura actual (Fases 1, 1b y 2 hechas)
 ```
 index.html            Estructura mínima: barra superior + <main id="vista">
 css/styles.css        Estilos mobile first (botones de 48 px)
 js/planillas-base.js  Las 3 planillas como DATOS (global PLANILLAS_BASE)
-js/store.js           Capa de datos, localStorage clave 'mashCheck.v1' (global Store)
+js/store.js           Capa de datos, localStorage clave 'mashCheck.v1' (global Store); también planillas editables y respaldo JSON
+js/report.js          Arma el HTML del reporte del día y el texto para compartir (global Report, solo lectura)
 js/app.js             Pantallas inicio/formulario, eventos delegados con data-act
 ```
-Orden de carga: planillas-base → store → app. Aún no hay sw.js ni manifest (Fase 3).
+Orden de carga: planillas-base → store → report → app. Aún no hay sw.js ni manifest (Fase 3).
 
 ## Decisiones tomadas (respuestas por defecto, no confirmadas explícitamente)
 - Unidad del reporte: el día. Firma: nombre escrito. Sin importar Excel.
@@ -67,3 +68,7 @@ Orden de carga: planillas-base → store → app. Aún no hay sw.js ni manifest 
 - Cada registro guarda una COPIA de la planilla (`registro.planilla`), no solo su id.
 - Fecha local con `Store.hoy()` (nunca `toISOString()`: UTC rompe el turno tarde).
 - siNo sin colores (en "Recargar" el Sí es lo malo); bienMal en verde/rojo.
+- Reporte: PDF = window.print() con @media print (A4); compartir = navigator.share con texto.
+  Solo marca como problema los ítems bienMal='mal' (los Sí/No no se juzgan).
+- Respaldo: JSON con {app:'mash-check', version:1, datos}. Restaurar REEMPLAZA todo (guarda lo anterior
+  en 'mashCheck.v1.anterior'). Un archivo de otra app se rechaza.

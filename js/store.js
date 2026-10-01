@@ -149,12 +149,59 @@ const Store = (() => {
     return persistir();
   }
 
+  // ---------- respaldo (copia de seguridad en un archivo JSON) ----------
+
+  // El archivo lleva "app" y "version" para poder reconocerlo: si alguien elige por error un
+  // respaldo de otra app (controlLinea, informeCalidad), lo rechazamos en vez de pisar los datos.
+  function exportar() {
+    return JSON.stringify({ app: 'mash-check', version: 1, exportado: new Date().toISOString(), datos: datos }, null, 1);
+  }
+
+  // Revisa un texto de respaldo SIN tocar nada. Devuelve { error } o { datos, registros, planillas }.
+  function revisarRespaldo(texto) {
+    let entrada;
+    try {
+      entrada = JSON.parse(texto);
+    } catch (error) {
+      return { error: 'El archivo no es un respaldo válido (no se puede leer).' };
+    }
+    if (!entrada || entrada.app !== 'mash-check' || !entrada.datos) {
+      return { error: 'Este archivo no es un respaldo de MASH Check.' };
+    }
+    const d = entrada.datos;
+    const planillaOk = (p) => p && Array.isArray(p.cabecera) && Array.isArray(p.secciones) && Array.isArray(p.pie);
+    const registroOk = (r) => r && r.id && r.fecha && r.cabecera && r.datos && planillaOk(r.planilla);
+    if (!Array.isArray(d.registros) || !Array.isArray(d.planillas) ||
+        !d.registros.every(registroOk) || !d.planillas.every(planillaOk)) {
+      return { error: 'El respaldo está incompleto o dañado. No se cambió nada.' };
+    }
+    return {
+      datos: { ultimoNombre: String(d.ultimoNombre || ''), registros: d.registros, planillas: d.planillas },
+      registros: d.registros.length,
+      planillas: d.planillas.length
+    };
+  }
+
+  // REEMPLAZA todo lo que hay por el contenido del respaldo (no mezcla): es lo más simple de
+  // entender y evita registros duplicados. Antes aparta una copia de lo anterior por si hay arrepentimiento.
+  function importar(texto) {
+    const revision = revisarRespaldo(texto);
+    if (revision.error) return false;
+    const antes = JSON.stringify(datos);
+    try { localStorage.setItem(CLAVE + '.anterior', antes); } catch (e) { /* sin espacio: seguimos igual */ }
+    datos = revision.datos;
+    if (persistir()) return true;
+    datos = JSON.parse(antes);
+    return false;
+  }
+
   function ultimoNombre() {
     return datos.ultimoNombre || '';
   }
 
   return {
     hoy, registrosDelDia, obtener, guardarRegistro, borrar, ultimoNombre,
-    planillas, planilla, guardarPlanilla, borrarPlanilla, restaurarDeFabrica
+    planillas, planilla, guardarPlanilla, borrarPlanilla, restaurarDeFabrica,
+    exportar, revisarRespaldo, importar
   };
 })();

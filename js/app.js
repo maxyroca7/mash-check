@@ -1,5 +1,5 @@
 /*
- * app.js — Interfaz: dibuja las pantallas (inicio, formulario de carga y editor de planillas)
+ * app.js — Interfaz: dibuja las pantallas (inicio, formulario de carga, reporte y editor de planillas)
  * y maneja los toques.
  *
  * Es una IIFE (función que se ejecuta sola) para que sus variables no se mezclen con las de
@@ -71,7 +71,15 @@
       '<h2>Cargar planilla</h2>' +
       bloquePlanillas +
       '<button class="btn" data-act="pl-nueva">+ Nueva planilla</button>' +
-      '<h2>Registros del día (' + registros.length + ')</h2>' + lista;
+      '<h2>Registros del día (' + registros.length + ')</h2>' + lista +
+      '<button class="btn principal" data-act="reporte">Ver reporte del día</button>' +
+      '<h2>Copia de seguridad</h2>' +
+      '<p class="ayuda">Los datos están solo en este celular. Descargá un respaldo de vez en cuando: ' +
+        'si borrás los datos del navegador o cambiás de celular, es lo único que los recupera.</p>' +
+      '<button class="btn" data-act="respaldo-exportar">Descargar respaldo</button>' +
+      '<button class="btn" data-act="respaldo-importar">Restaurar respaldo</button>' +
+      // Input de archivo escondido: el botón de arriba lo "toca" por nosotros (el original es feo e incómodo).
+      '<input type="file" id="archivo-respaldo" accept=".json,application/json" hidden>';
   }
 
   // Una planilla: el botón grande para CARGAR y, abajo, sus tres acciones de administración.
@@ -247,6 +255,71 @@
       o.classList.toggle('sel', activo);
       o.setAttribute('aria-pressed', activo);
     });
+  }
+
+  // ====================================================================
+  // REPORTE DEL DÍA Y RESPALDO
+  // ====================================================================
+
+  function pintarReporte() {
+    estado.borrador = null;
+    estado.edicion = null;
+    const registros = Store.registrosDelDia(estado.fecha);
+    // .no-print: la barra de botones no sale en el papel/PDF (ver @media print en styles.css).
+    vista.innerHTML =
+      '<section class="no-print">' +
+        '<div class="barra-reporte">' +
+          '<button class="btn" data-act="volver">← Volver</button>' +
+          '<button class="btn principal" data-act="imprimir">Exportar PDF</button>' +
+          '<button class="btn" data-act="compartir">Compartir resumen</button>' +
+        '</div>' +
+        '<p class="ayuda">Exportar PDF abre la ventana de impresión: elegí “Guardar como PDF”.</p>' +
+      '</section>' +
+      Report.html(estado.fecha, registros);
+    window.scrollTo(0, 0);
+  }
+
+  function compartirResumen() {
+    const texto = Report.texto(estado.fecha, Store.registrosDelDia(estado.fecha));
+    if (navigator.share) {
+      // Abre el menú de compartir del celular (WhatsApp, mail...). Si se cancela, no pasa nada.
+      navigator.share({ title: 'MASH Check', text: texto }).catch(() => {});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(texto).then(
+        () => alert('Resumen copiado. Pegalo donde quieras.'),
+        () => alert('No se pudo copiar el resumen.'));
+    } else {
+      alert(texto);
+    }
+  }
+
+  // Baja un archivo JSON con TODO (planillas y registros), con la fecha en el nombre.
+  function descargarRespaldo() {
+    const blob = new Blob([Store.exportar()], { type: 'application/json' });
+    const enlace = document.createElement('a');
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = 'mash-check-respaldo-' + Store.hoy() + '.json';
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(enlace.href), 1000);
+  }
+
+  function restaurarRespaldo(archivo) {
+    const lector = new FileReader();
+    lector.onerror = () => alert('No se pudo leer el archivo.');
+    lector.onload = () => {
+      // Primero se REVISA sin tocar nada; recién después de que confirmes se reemplaza.
+      const revision = Store.revisarRespaldo(lector.result);
+      if (revision.error) { alert(revision.error); return; }
+      const aviso = 'Este respaldo tiene ' + revision.registros + ' registros y ' + revision.planillas +
+        ' planillas.\n\nVa a REEMPLAZAR todo lo que hay ahora en este celular. ¿Seguir?';
+      if (!confirm(aviso)) return;
+      if (!Store.importar(lector.result)) { alert('No se pudo restaurar el respaldo.'); return; }
+      alert('Respaldo restaurado.');
+      pintarInicio();
+    };
+    lector.readAsText(archivo);
   }
 
   // ====================================================================
@@ -561,6 +634,12 @@
         if (confirm('¿Salir sin guardar los cambios de la planilla?')) pintarInicio();
         break;
       case 'pl-restaurar': Store.restaurarDeFabrica(); pintarInicio(); break;
+      case 'reporte': pintarReporte(); break;
+      case 'volver': pintarInicio(); break;
+      case 'imprimir': window.print(); break;
+      case 'compartir': compartirResumen(); break;
+      case 'respaldo-exportar': descargarRespaldo(); break;
+      case 'respaldo-importar': document.getElementById('archivo-respaldo').click(); break;
     }
   });
 
@@ -577,6 +656,11 @@
 
   // Selector de día de la pantalla de inicio.
   vista.addEventListener('change', (e) => {
+    if (e.target.id === 'archivo-respaldo' && e.target.files[0]) {
+      restaurarRespaldo(e.target.files[0]);
+      e.target.value = ''; // para poder elegir el mismo archivo otra vez
+      return;
+    }
     if (e.target.id === 'filtro-fecha' && e.target.value) {
       estado.fecha = e.target.value;
       pintarInicio();
