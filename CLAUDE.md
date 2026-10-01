@@ -67,8 +67,9 @@ Orden de carga: planillas-base → store → report → app. Aún no hay sw.js n
 - Botiquines: el PUESTO es un campo de cabecera (un registro por puesto, 16 ítems).
 - Cada registro guarda una COPIA de la planilla (`registro.planilla`), no solo su id.
 - Fecha local con `Store.hoy()` (nunca `toISOString()`: UTC rompe el turno tarde).
-- siNo sin colores (en "Recargar" el Sí es lo malo); bienMal en verde/rojo.
+- Cada columna siNo tiene `problema` ('no' | 'si' | 'ninguno'): define cuál respuesta va en rojo y sube a "Ítems a atender". Sin definir → botones azul/naranja y no se juzga. bienMal: "Mal" siempre es problema.
+- Store.migrar() completa `problema` en planillas y registros viejos de las 3 planillas de fábrica (sin pisar lo elegido por el usuario).
 - Reporte: PDF = window.print() con @media print (A4); compartir = navigator.share con texto.
-  Solo marca como problema los ítems bienMal='mal' (los Sí/No no se juzgan).
+  Marca como "para atender" los bienMal='mal' y los siNo que coinciden con `problema`; aparte lista las casillas Sí/No y Bien/Mal sin responder (los "check" no cuentan).
 - Respaldo: JSON con {app:'mash-check', version:1, datos}. Restaurar REEMPLAZA todo (guarda lo anterior
   en 'mashCheck.v1.anterior'). Un archivo de otra app se rechaza.

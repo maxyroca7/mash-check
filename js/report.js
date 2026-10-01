@@ -24,25 +24,54 @@ const Report = (() => {
     return reg.planilla.cabecera.map((c) => reg.cabecera[c.key]).filter(Boolean).join(' · ');
   }
 
-  // Ítems que quedaron en "Mal": es lo único que el reporte marca como problema.
-  // Los Sí/No NO se juzgan: en "Disponible" el No es lo malo y en "Recargar" el Sí, y el
-  // reporte no puede saber cuál es cuál. Esos se ven en la tabla completa.
-  function itemsEnMal(reg) {
+  // ¿Esta respuesta es un problema a atender?
+  //   bienMal: siempre "Mal".
+  //   siNo: depende de la columna (propiedad "problema": 'no', 'si' o 'ninguno'). Si la columna
+  //   no lo define no se juzga: el reporte no puede adivinar cuál respuesta es la mala.
+  function esProblema(col, valor) {
+    if (col.tipo === 'bienMal') return valor === 'mal';
+    if (col.tipo === 'siNo') return Boolean(col.problema) && col.problema !== 'ninguno' && valor === col.problema;
+    return false;
+  }
+
+  function respuestaDe(col, valor) {
+    if (col.tipo === 'bienMal') return valor === 'mal' ? 'Mal' : 'Bien';
+    return valor === 'si' ? 'Sí' : 'No';
+  }
+
+  // Ítems con alguna respuesta problemática, con el motivo ("Disponible: No") y lo escrito en
+  // las columnas de texto de esa fila (acción, responsable, observaciones...).
+  function itemsAtender(reg) {
     const items = [];
     reg.planilla.secciones.forEach((sec) => {
       sec.filas.forEach((fila) => {
-        const hayMal = sec.columnas.some((col) =>
-          col.tipo === 'bienMal' && reg.datos[sec.id + '.' + fila.key + '.' + col.key] === 'mal');
-        if (!hayMal) return;
-        // Acompañamos con lo escrito en las columnas de texto de esa fila (acción, responsable...).
+        const valorDe = (col) => reg.datos[sec.id + '.' + fila.key + '.' + col.key];
+        const motivos = sec.columnas
+          .filter((col) => esProblema(col, valorDe(col)))
+          .map((col) => col.label + ': ' + respuestaDe(col, valorDe(col)));
+        if (!motivos.length) return;
         const detalle = sec.columnas
           .filter((col) => col.tipo === 'texto')
-          .map((col) => ({ label: col.label, valor: (reg.datos[sec.id + '.' + fila.key + '.' + col.key] || '').trim() }))
+          .map((col) => ({ label: col.label, valor: (valorDe(col) || '').trim() }))
           .filter((x) => x.valor);
-        items.push({ seccion: sec.titulo, item: fila.label, detalle: detalle });
+        items.push({ seccion: sec.titulo, item: fila.label, motivos: motivos, detalle: detalle });
       });
     });
     return items;
+  }
+
+  // Casillas Sí/No y Bien/Mal que quedaron sin tocar. Los "check" no cuentan: no tildar
+  // un "Realizado" es una respuesta válida ("todavía no se hizo").
+  function sinResponder(reg) {
+    let cantidad = 0;
+    reg.planilla.secciones.forEach((sec) => {
+      sec.filas.forEach((fila) => {
+        sec.columnas.forEach((col) => {
+          if ((col.tipo === 'siNo' || col.tipo === 'bienMal') && !reg.datos[sec.id + '.' + fila.key + '.' + col.key]) cantidad++;
+        });
+      });
+    });
+    return cantidad;
   }
 
   function nombres(registros) {
@@ -58,9 +87,10 @@ const Report = (() => {
   function celda(col, valor) {
     if (col.tipo === 'texto') return '<td>' + esc(valor) + '</td>';
     if (!valor) return '<td class="r-centro r-nada">—</td>';
-    if (col.tipo === 'siNo') return '<td class="r-centro">' + (valor === 'si' ? 'Sí' : 'No') + '</td>';
-    if (col.tipo === 'bienMal') {
-      return valor === 'mal' ? '<td class="r-centro r-mal">Mal</td>' : '<td class="r-centro r-bien">Bien</td>';
+    if (col.tipo === 'siNo' || col.tipo === 'bienMal') {
+      const juzga = col.tipo === 'bienMal' || (col.problema && col.problema !== 'ninguno');
+      const clase = !juzga ? '' : (esProblema(col, valor) ? ' r-mal' : ' r-bien');
+      return '<td class="r-centro' + clase + '">' + respuestaDe(col, valor) + '</td>';
     }
     return '<td class="r-centro">✔</td>'; // check
   }
@@ -96,16 +126,25 @@ const Report = (() => {
 
   function htmlProblemas(registros) {
     const filas = [];
+    const pendientes = [];
     registros.forEach((reg) => {
-      itemsEnMal(reg).forEach((it) => {
+      itemsAtender(reg).forEach((it) => {
         const detalle = it.detalle.map((d) => esc(d.label) + ': ' + esc(d.valor)).join(' · ');
         filas.push('<li><b>' + esc(reg.planilla.titulo) + '</b> (' + esc(resumenCabecera(reg)) + ') — ' +
-          esc(it.item) + (detalle ? '<br><span class="r-detalle">' + detalle + '</span>' : '') + '</li>');
+          esc(it.item) + ' <span class="r-motivo">[' + esc(it.motivos.join(', ')) + ']</span>' +
+          (detalle ? '<br><span class="r-detalle">' + detalle + '</span>' : '') + '</li>');
       });
+      const faltan = sinResponder(reg);
+      if (faltan) pendientes.push(esc(reg.planilla.titulo) + ' (' + esc(resumenCabecera(reg)) + '): ' + faltan);
     });
-    if (!filas.length) return '<p class="r-ok">✔ Ningún ítem quedó en "Mal".</p>';
-    return '<p class="r-alerta">' + filas.length + (filas.length === 1 ? ' ítem en "Mal"' : ' ítems en "Mal"') +
-      '</p><ul class="r-lista">' + filas.join('') + '</ul>';
+
+    const atender = filas.length
+      ? '<p class="r-alerta">' + filas.length + (filas.length === 1 ? ' ítem para atender' : ' ítems para atender') +
+        '</p><ul class="r-lista">' + filas.join('') + '</ul>'
+      : '<p class="r-ok">✔ Ningún ítem para atender.</p>';
+    const faltantes = pendientes.length
+      ? '<p class="r-pend"><b>Sin responder:</b> ' + pendientes.join(' · ') + '</p>' : '';
+    return atender + faltantes;
   }
 
   function html(fecha, registros) {
@@ -134,17 +173,19 @@ const Report = (() => {
     }
     let total = 0;
     registros.forEach((reg) => {
-      const items = itemsEnMal(reg);
+      const items = itemsAtender(reg);
+      const faltan = sinResponder(reg);
       total += items.length;
       const quien = resumenCabecera(reg);
       lineas.push('', '• ' + reg.planilla.titulo + (quien ? ' (' + quien + ')' : '') + ': ' +
-        (items.length ? items.length + ' en Mal' : 'sin ítems en Mal'));
+        (items.length ? items.length + ' para atender' : 'nada para atender') +
+        (faltan ? ' · ' + faltan + ' sin responder' : ''));
       items.forEach((it) => {
         const extra = it.detalle.map((d) => d.valor).join(' / ');
-        lineas.push('   - ' + it.item + (extra ? ' → ' + extra : ''));
+        lineas.push('   - ' + it.item + ' [' + it.motivos.join(', ') + ']' + (extra ? ' → ' + extra : ''));
       });
     });
-    lineas.push('', total ? 'Total en Mal: ' + total : 'Todo en orden.');
+    lineas.push('', total ? 'Total para atender: ' + total : 'Todo en orden.');
     return lineas.join('\n');
   }
 

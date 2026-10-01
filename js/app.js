@@ -176,9 +176,20 @@
 
   function controlDeCelda(col, clave) {
     const valor = estado.borrador.datos[clave];
-    if (col.tipo === 'siNo') return grupoBotones(clave, [['si', 'Sí', ''], ['no', 'No', '']], valor);
-    // bienMal sí lleva colores (verde/rojo): "Mal" siempre es un problema.
-    // siNo NO: en "Recargar (<50%)" el "Sí" es lo malo, y en "Disponible" es lo bueno.
+    // siNo: el color sale de la propiedad "problema" de la columna. La respuesta que hay que
+    // atender va en rojo y la otra en verde (en "Recargar" el Sí es rojo; en "Disponible", el No).
+    // Si la columna no define cuál es el problema no podemos juzgar: dos colores neutros
+    // (azul/naranja) que igual se distinguen entre sí.
+    if (col.tipo === 'siNo') {
+      let colorSi = 'azul';
+      let colorNo = 'naranja';
+      if (col.problema === 'no' || col.problema === 'si') {
+        colorSi = col.problema === 'si' ? 'mal' : 'ok';
+        colorNo = col.problema === 'no' ? 'mal' : 'ok';
+      }
+      return grupoBotones(clave, [['si', 'Sí', colorSi], ['no', 'No', colorNo]], valor);
+    }
+    // bienMal: "Mal" siempre es un problema.
     if (col.tipo === 'bienMal') return grupoBotones(clave, [['bien', 'Bien', 'ok'], ['mal', 'Mal', 'mal']], valor);
     if (col.tipo === 'check') return grupoBotones(clave, [['si', 'Realizado', '']], valor);
     return '<input type="text" data-campo="datos" data-k="' + esc(clave) + '" value="' + esc(valor) + '">';
@@ -348,14 +359,14 @@
       pie: p.pie.map(campoABorrador),
       secciones: p.secciones.map((s) => ({
         titulo: s.titulo,
-        columnas: s.columnas.map((c) => ({ label: c.label, tipo: c.tipo })),
+        columnas: s.columnas.map((c) => ({ label: c.label, tipo: c.tipo, problema: c.problema || 'ninguno' })),
         filasTexto: s.filas.map((f) => f.label).join('\n')
       }))
     };
   }
 
   function seccionVacia() {
-    return { titulo: '', columnas: [{ label: '', tipo: 'siNo' }], filasTexto: '' };
+    return { titulo: '', columnas: [{ label: '', tipo: 'siNo', problema: 'no' }], filasTexto: '' };
   }
 
   function abrirEditor(borrador) {
@@ -423,6 +434,14 @@
     ).join('') + '</select>';
   }
 
+  // Solo para columnas Sí/No: qué respuesta se marca como "para atender" en el reporte.
+  function selectorProblema(col, ci, si) {
+    if (col.tipo !== 'siNo') return '';
+    return '<label class="celda-label">En el reporte, atender si responde:</label>' +
+      selectorTipo([['no', 'No'], ['si', 'Sí'], ['ninguno', 'Ninguna (no marcar)']],
+        col.problema || 'ninguno', atributosCampo('columnas', ci, 'problema', si));
+  }
+
   // Lista de datos sueltos (cabecera = arriba, pie = al final de la planilla).
   function htmlListaCampos(lista) {
     const campos = estado.edicion[lista].map((c, i) => {
@@ -447,6 +466,7 @@
         '<input type="text" placeholder="Nombre de la columna (ej. Condición)" value="' + esc(col.label) + '"' +
           atributosCampo('columnas', ci, 'label', si) + '>' +
         selectorTipo(TIPOS_COLUMNA, col.tipo, atributosCampo('columnas', ci, 'tipo', si)) +
+        selectorProblema(col, ci, si) +
         botonesOrden('columnas', ci, si) +
       '</div>'
     ).join('');
@@ -492,7 +512,7 @@
     }
     if (d.act === 'b-agrega') {
       if (d.lista === 'secciones') lista.push(seccionVacia());
-      else if (d.lista === 'columnas') lista.push({ label: '', tipo: 'siNo' });
+      else if (d.lista === 'columnas') lista.push({ label: '', tipo: 'siNo', problema: 'no' });
       else lista.push({ key: null, label: '', tipo: 'texto', opcionesTexto: '' });
     }
     pintarEditor();
@@ -551,7 +571,13 @@
       secciones.push({
         id: 's' + (si + 1),
         titulo: tituloSeccion,
-        columnas: s.columnas.map((c, ci) => ({ key: 'c' + (ci + 1), label: c.label.trim(), tipo: c.tipo })),
+        columnas: s.columnas.map((c, ci) => {
+          const col = { key: 'c' + (ci + 1), label: c.label.trim(), tipo: c.tipo };
+          // Se guarda siempre (aunque sea "ninguno"): así se distingue de una columna vieja
+          // que nunca lo tuvo y la migración de Store no le pisa la elección.
+          if (c.tipo === 'siNo') col.problema = c.problema || 'ninguno';
+          return col;
+        }),
         filas: filas.map((label, fi) => ({ key: 'r' + (fi + 1), label: label }))
       });
     }
@@ -597,8 +623,8 @@
     }
     if (!d.prop) return;
     obtenerLista(d.lista, d.s)[Number(d.i)][d.prop] = campo.value;
-    // Cambiar el tipo de un dato puede mostrar/ocultar el cuadro de opciones: ahí sí redibujamos.
-    if (d.prop === 'tipo' && d.lista !== 'columnas') pintarEditor();
+    // Cambiar el tipo puede mostrar/ocultar otros controles (opciones, "atender si"): ahí sí redibujamos.
+    if (d.prop === 'tipo') pintarEditor();
   }
 
   // ====================================================================

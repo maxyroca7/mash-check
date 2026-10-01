@@ -35,6 +35,31 @@ const Store = (() => {
     return JSON.parse(JSON.stringify(objeto));
   }
 
+  // Las planillas de fábrica ganaron "problema" (ver planillas-base.js) DESPUÉS de que algunas ya
+  // estaban guardadas en el celu. Se lo agregamos a las columnas que todavía no tienen esa
+  // propiedad (ni siquiera "ninguno"), así que NO pisa lo que el usuario haya elegido.
+  // También se aplica a la copia de la planilla de cada registro, para que el reporte de días
+  // ya cargados marque los problemas.
+  function completarProblemas(planilla) {
+    const base = planilla && PLANILLAS_BASE.find((b) => b.id === planilla.id);
+    if (!base || !Array.isArray(planilla.secciones)) return;
+    planilla.secciones.forEach((sec) => {
+      const secBase = base.secciones.find((x) => x.id === sec.id);
+      if (!secBase) return;
+      sec.columnas.forEach((col) => {
+        if (col.tipo !== 'siNo' || col.problema !== undefined) return;
+        const colBase = secBase.columnas.find((c) => c.key === col.key && c.label === col.label);
+        if (colBase && colBase.problema) col.problema = colBase.problema;
+      });
+    });
+  }
+
+  function migrar(d) {
+    (d.planillas || []).forEach(completarProblemas);
+    (d.registros || []).forEach((r) => completarProblemas(r.planilla));
+    return d;
+  }
+
   function cargar() {
     let texto = null;
     try {
@@ -45,7 +70,7 @@ const Store = (() => {
       // Desde ahora las planillas viven en el Store (no en PLANILLAS_BASE) porque el usuario
       // las puede editar; PLANILLAS_BASE queda solo como "punto de partida de fábrica".
       if (!Array.isArray(guardado.planillas)) guardado.planillas = copiar(PLANILLAS_BASE);
-      return guardado;
+      return migrar(guardado);
     } catch (error) {
       // Si el JSON está dañado NO arrancamos en blanco sin más: el próximo guardado pisaría
       // los datos viejos. Los apartamos en otra clave para poder recuperarlos a mano.
@@ -176,7 +201,7 @@ const Store = (() => {
       return { error: 'El respaldo está incompleto o dañado. No se cambió nada.' };
     }
     return {
-      datos: { ultimoNombre: String(d.ultimoNombre || ''), registros: d.registros, planillas: d.planillas },
+      datos: migrar({ ultimoNombre: String(d.ultimoNombre || ''), registros: d.registros, planillas: d.planillas }),
       registros: d.registros.length,
       planillas: d.planillas.length
     };

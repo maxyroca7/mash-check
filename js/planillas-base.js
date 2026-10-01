@@ -15,6 +15,10 @@
  *
  * TIPOS de columna: siNo | bienMal | check | texto
  *
+ * En las columnas siNo, "problema" dice cuál respuesta hay que ATENDER: 'no', 'si' o 'ninguno'.
+ * Hace falta porque el reporte no puede adivinarlo: en "Disponible" lo malo es el No, pero en
+ * "Recargar (<50%)" lo malo es el Sí. (En bienMal lo malo siempre es "Mal".)
+ *
  * La FECHA no está acá: todos los registros tienen siempre una fecha (el día elegido).
  * Tampoco hay firma dibujada: por ahora alcanza con el nombre escrito (ver DIAGNOSTICO.md).
  */
@@ -35,7 +39,7 @@ const PLANILLAS_BASE = [
       id: 's1',
       titulo: 'Elementos a chequear',
       columnas: [
-        { key: 'c1', label: 'Disponible', tipo: 'siNo' },
+        { key: 'c1', label: 'Disponible', tipo: 'siNo', problema: 'no' },
         { key: 'c2', label: 'Observaciones', tipo: 'texto' }
       ],
       filas: [
@@ -140,11 +144,11 @@ const PLANILLAS_BASE = [
       id: 's1',
       titulo: 'Ubicaciones',
       columnas: [
-        { key: 'c1', label: 'Disponible', tipo: 'siNo' },
-        { key: 'c2', label: 'Recargar (<50%)', tipo: 'siNo' },
-        { key: 'c3', label: 'Posee cartelería', tipo: 'siNo' },
-        { key: 'c4', label: 'Tapa', tipo: 'siNo' },
-        { key: 'c5', label: 'Limpio', tipo: 'siNo' },
+        { key: 'c1', label: 'Disponible', tipo: 'siNo', problema: 'no' },
+        { key: 'c2', label: 'Recargar (<50%)', tipo: 'siNo', problema: 'si' },
+        { key: 'c3', label: 'Posee cartelería', tipo: 'siNo', problema: 'no' },
+        { key: 'c4', label: 'Tapa', tipo: 'siNo', problema: 'no' },
+        { key: 'c5', label: 'Limpio', tipo: 'siNo', problema: 'no' },
         { key: 'c6', label: 'Observaciones', tipo: 'texto' }
       ],
       filas: [

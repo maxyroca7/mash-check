@@ -120,6 +120,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--v
 .opc.sel { background: var(--verde); border-color: var(--verde); color: #fff; font-weight: 600; }
 .opc.ok.sel { background: var(--bien); border-color: var(--bien); }
 .opc.mal.sel { background: var(--mal); border-color: var(--mal); }
+/* Sí/No cuando no se sabe cuál es el problema: dos colores distintos pero sin "bueno/malo". */
+.opc.azul.sel { background: #1565c0; border-color: #1565c0; }
+.opc.naranja.sel { background: #ef6c00; border-color: #ef6c00; }
 
 /* Barra fija abajo: Guardar siempre a mano sin tener que bajar hasta el final de la planilla. */
 .barra-guardar {
@@ -181,6 +184,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--v
 .r-lista { margin: 4px 0; padding-left: 20px; font-size: 14px; }
 .r-lista li { margin-bottom: 4px; }
 .r-detalle { color: var(--gris); }
+.r-motivo { color: var(--mal); font-weight: 600; }
+.r-pend { font-size: 14px; margin: 8px 0; padding: 6px 8px; background: #fff4e0; border-radius: 6px; }
 .r-obs { font-size: 14px; }
 .r-scroll { overflow-x: auto; }
 .r-tabla { border-collapse: collapse; width: 100%; font-size: 13px; }
@@ -204,5 +209,5 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--v
   .r-tabla thead { display: table-header-group; } /* si la tabla sigue en otra hoja, repite el encabezado */
   .reporte h3, .reporte h4 { break-after: avoid; }
   /* Sin esto el navegador "ahorra tinta" y se pierden los fondos rojos/verdes del reporte. */
-  .r-tabla th, .r-tabla .r-mal { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .r-tabla th, .r-tabla .r-mal, .r-pend { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
