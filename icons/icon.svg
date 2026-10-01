@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo a sangre (sin bordes redondeados): Android lo recorta solo según el estilo del celu. -->
+  <rect width="512" height="512" fill="#0b6e4f"/>
+  <!-- Escudo (seguridad) con tilde (control). Queda dentro del 80% central: la "zona segura" del ícono maskable. -->
+  <path d="M256 130 L356 166 V256 C356 322 312 366 256 390 C200 366 156 322 156 256 V166 Z" fill="#ffffff"/>
+  <path d="M208 262 L246 300 L310 222" fill="none" stroke="#0b6e4f" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

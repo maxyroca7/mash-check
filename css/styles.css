@@ -211,3 +211,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--v
   /* Sin esto el navegador "ahorra tinta" y se pierden los fondos rojos/verdes del reporte. */
   .r-tabla th, .r-tabla .r-mal, .r-pend { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Versión de la app, discreta, al pie de la pantalla principal. */
+.version { text-align: center; font-size: 12px; color: var(--gris); margin: 24px 0 0; }

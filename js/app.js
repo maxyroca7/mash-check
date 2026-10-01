@@ -18,6 +18,9 @@
   // nada a medias.
   const estado = { fecha: Store.hoy(), borrador: null, edicion: null };
 
+  // Versión de la app en ESTE celular (se completa sola, ver mostrarVersion al final).
+  let textoVersion = '';
+
   // Tipos de columna que ofrece el constructor (los mismos que sabe dibujar el formulario).
   const TIPOS_COLUMNA = [
     ['siNo', 'Sí / No'],
@@ -79,7 +82,8 @@
       '<button class="btn" data-act="respaldo-exportar">Descargar respaldo</button>' +
       '<button class="btn" data-act="respaldo-importar">Restaurar respaldo</button>' +
       // Input de archivo escondido: el botón de arriba lo "toca" por nosotros (el original es feo e incómodo).
-      '<input type="file" id="archivo-respaldo" accept=".json,application/json" hidden>';
+      '<input type="file" id="archivo-respaldo" accept=".json,application/json" hidden>' +
+      '<p class="version" id="version">' + esc(textoVersion) + '</p>';
   }
 
   // Una planilla: el botón grande para CARGAR y, abajo, sus tres acciones de administración.
@@ -694,4 +698,24 @@
   });
 
   pintarInicio();
+
+  // Registramos el service worker (la parte "sin conexión"). Solo con http/https: abierto como
+  // archivo (file://) los navegadores no lo permiten.
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  // Muestra la versión de la app que tiene ESTE celular (el nombre de la caché del service worker).
+  // Sirve para comprobar que se actualizó después de subir cambios.
+  function mostrarVersion() {
+    if (!window.caches) return;
+    caches.keys().then((nombres) => {
+      const actual = nombres.filter((n) => n.startsWith('mash-check-')).sort().pop();
+      if (!actual) return;
+      textoVersion = 'Versión ' + actual.replace('mash-check-', '');
+      const pie = document.getElementById('version');
+      if (pie) pie.textContent = textoVersion; // si la pantalla principal ya está dibujada
+    });
+  }
+  mostrarVersion();
 })();

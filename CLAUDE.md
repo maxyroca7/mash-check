@@ -51,7 +51,7 @@ módulos, un objeto global por archivo, datos en el dispositivo, reporte imprimi
 ## Probar
 Servir la carpeta (con `file://` el service worker no anda): `python3 -m http.server 8000`.
 
-## Estructura actual (Fases 1, 1b y 2 hechas)
+## Estructura actual (Fases 1, 1b, 2 y 3 hechas)
 ```
 index.html            Estructura mínima: barra superior + <main id="vista">
 css/styles.css        Estilos mobile first (botones de 48 px)
@@ -60,7 +60,17 @@ js/store.js           Capa de datos, localStorage clave 'mashCheck.v1' (global S
 js/report.js          Arma el HTML del reporte del día y el texto para compartir (global Report, solo lectura)
 js/app.js             Pantallas inicio/formulario, eventos delegados con data-act
 ```
-Orden de carga: planillas-base → store → report → app. Aún no hay sw.js ni manifest (Fase 3).
+Orden de carga: planillas-base → store → report → app.
+```
+manifest.json         Datos de instalación (rutas relativas, start_url './')
+sw.js                 Service worker: red primero (cache:'no-cache'), caché si no hay señal. VERSION = 'mash-check-vN'
+icons/                icon.svg (fuente), icon-192.png, icon-512.png (escudo verde con tilde)
+GUIA-PUBLICACION.md   Paso a paso: GitHub Pages, instalar, actualizar, problemas
+```
+**Cada cambio en cualquier archivo de la app: subir VERSION en sw.js** y decirle al usuario qué archivos subir
+(siempre incluir sw.js). Si se agrega un archivo a la app, agregarlo también a ARCHIVOS en sw.js.
+Probado en Chromium real bajo /mash-check/: instala, abre offline, actualiza la caché y conserva los datos.
+La versión instalada se ve al pie de la pantalla principal (sale del nombre de la caché).
 
 ## Decisiones tomadas (respuestas por defecto, no confirmadas explícitamente)
 - Unidad del reporte: el día. Firma: nombre escrito. Sin importar Excel.
